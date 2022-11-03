@@ -1,4 +1,4 @@
-namespace LineNotifyService
+namespace LineChatRoomService
 {
     public class WeatherForecast
     {
