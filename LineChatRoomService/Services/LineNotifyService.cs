@@ -1,4 +1,5 @@
 ﻿using LineChatRoomService.Models;
+using LineChatRoomService.Repositories.Interface;
 using LineChatRoomService.Services.Interface;
 using LineChatRoomService.Utility;
 using Microsoft.AspNetCore.WebUtilities;
@@ -28,7 +29,9 @@ namespace LineChatRoomService.Services
         public const string RevokeRoomTokenEndpoint = "https://notify-api.line.me/api/revoke";
 
 
-        public LineNotifyService(IHttpClientFactory clientFactory, IHttpContextAccessor httpContextAccessor)
+        public LineNotifyService(
+            IHttpClientFactory clientFactory,
+            IHttpContextAccessor httpContextAccessor)
         {
             ClientId = Environment.GetEnvironmentVariable("line_client_id")!;
             ClientSecret = Environment.GetEnvironmentVariable("line_client_secret")!;
@@ -76,6 +79,7 @@ namespace LineChatRoomService.Services
                 throw new Exception("Cannot get infomation from state..");
             return (state_obj.RedirectUrl, state_obj.User);
         }
+
 
         public string BuildChallengeUrl(string redirectUri, string user)
         {
@@ -141,32 +145,25 @@ namespace LineChatRoomService.Services
             return payload;
         }
 
-        public async Task<bool> SendMessageToChatRoom(string roomId, string testMessage)
+        public async Task<bool> SendMessage(string token, string testMessage)
         {
             var message = new Dictionary<string, string>
             {
                 ["message"] = testMessage,
             };
 
-
             using var request = new HttpRequestMessage(HttpMethod.Post, SendMessageEndpoint);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             request.Content = new FormUrlEncodedContent(message);
-
-            // TODO: Get room token from id 
-            var token = "";
 
             var client = CreateHttpClient(token);
             using var response = await client.SendAsync(request);
             return response.IsSuccessStatusCode;
         }
 
-        public async Task RevokeChatRoom(string roomId)
+        public async Task RevokeChatRoom(string token)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, RevokeRoomTokenEndpoint);
-
-            // TODO: Remove room and get token
-            var token = "";
 
             var client = CreateHttpClient(token);
             using var response = await client.SendAsync(request);
@@ -175,7 +172,6 @@ namespace LineChatRoomService.Services
                 var result = await response.Content.ReadAsStringAsync();
                 Console.WriteLine(result);
             }
-
         }
 
 

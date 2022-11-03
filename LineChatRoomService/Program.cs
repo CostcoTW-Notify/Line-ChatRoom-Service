@@ -1,9 +1,11 @@
+using LineChatRoomService.Repositories;
+using LineChatRoomService.Repositories.Interface;
 using LineChatRoomService.Services;
 using LineChatRoomService.Services.Interface;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
+using MongoDB.Driver;
 using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,6 +32,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ILineNotifyService, LineNotifyService>();
+builder.Services.AddScoped<IChatRoomService, ChatRoomService>();
+builder.Services.AddSingleton<IChatRoomRepository, ChatRoomRepository>();
+builder.Services.AddSingleton(c =>
+{
+    var connStr = Environment.GetEnvironmentVariable("mongo_conn_str")!;
+    return new MongoClient(connStr).GetDatabase("LineChatRoom-Service");
+});
+builder.Services.AddCors(op =>
+{
+    op.AddPolicy(
+        name: "AllowAll",
+        policy =>
+        {
+            policy.AllowAnyOrigin();
+            policy.AllowAnyMethod();
+            policy.AllowAnyHeader();
+        });
+});
 
 // Require All endpoint
 builder.Services.AddAuthorization(options =>
@@ -48,6 +68,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+app.UseCors("AllowAll");
 
 app.UseHttpsRedirection();
 
@@ -62,3 +83,9 @@ app.Map("/api/test2", async (HttpContext context, ClaimsPrincipal principal) =>
 });
 
 app.Run();
+
+
+static void EnsureEnv()
+{
+
+}

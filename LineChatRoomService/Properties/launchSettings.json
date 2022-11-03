@@ -9,7 +9,7 @@
     }
   },
   "profiles": {
-    "LineNotifyService": {
+    "LineChatRoomService": {
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": true,
@@ -20,7 +20,8 @@
         "AES-Key": "",
         "AES-IV": "",
         "line_client_id": "",
-        "line_client_secret": ""
+        "line_client_secret": "",
+        "mongo_conn_str": "mongodb://192.168.2.6:27017/LineChatRoom-Service"
       }
     },
     "IIS Express": {

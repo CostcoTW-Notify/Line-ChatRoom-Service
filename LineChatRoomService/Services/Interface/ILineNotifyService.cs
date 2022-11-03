@@ -10,11 +10,11 @@ namespace LineChatRoomService.Services.Interface
 
         (string redirectUrl, string user) GetInfoFromState(string state);
 
-        Task<ChatRoomInformation?> GetChatRoomInfomation(string roomToken);
+        Task<ChatRoomInformation?> GetChatRoomInfomation(string token);
 
-        Task<bool> SendMessageToChatRoom(string roomId, string testMessage);
+        Task<bool> SendMessage(string token, string testMessage);
 
-        Task RevokeChatRoom(string roomId);
+        Task RevokeChatRoom(string token);
 
     }
 }
