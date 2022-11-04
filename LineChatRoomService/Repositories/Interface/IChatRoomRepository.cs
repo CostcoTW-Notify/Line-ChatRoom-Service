@@ -5,7 +5,7 @@ namespace LineChatRoomService.Repositories.Interface
     public interface IChatRoomRepository
     {
 
-        Task<LineChatRoom> GetById(string id);
+        Task<LineChatRoom?> GetById(string id);
 
         Task<List<LineChatRoom>> GetByOwner(string ownerId);
 

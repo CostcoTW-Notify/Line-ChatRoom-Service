@@ -62,12 +62,25 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+
+app.Use(async (context, next) =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    try
+    {
+        await next.Invoke();
+    }
+    catch (Exception ex)
+    {
+        context.Response.StatusCode = 400;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            error_message = ex.Message.ToString()
+        });
+    }
+});
+// Configure the HTTP request pipeline.
+app.UseSwagger();
+app.UseSwaggerUI();
 app.UseCors("AllowAll");
 
 app.UseHttpsRedirection();

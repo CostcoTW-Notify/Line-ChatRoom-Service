@@ -1,4 +1,5 @@
-﻿using LineChatRoomService.Models.Mongo;
+﻿using LineChatRoomService.Models;
+using LineChatRoomService.Models.Mongo;
 
 namespace LineChatRoomService.Services.Interface
 {
@@ -11,7 +12,11 @@ namespace LineChatRoomService.Services.Interface
 
         Task CreateChatRoom(string ownedId, string token);
 
-        Task UpdateChatRoom(LineChatRoom charRoom);
+        Task UpdateChatRoom(ChatRoomViewModel charRoom);
+
+        Task<IEnumerable<ChatRoomViewModel>> GetAllChatRooms();
+
+        Task<ChatRoomViewModel?> GetChatRoomById(string roomId);
 
     }
 }

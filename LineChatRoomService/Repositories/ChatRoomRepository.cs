@@ -24,7 +24,7 @@ namespace LineChatRoomService.Repositories
         public Task Delete(LineChatRoom chatRoom)
             => this.ChatRoomCollection.DeleteOneAsync(x => x.Id == chatRoom.Id);
 
-        public Task<LineChatRoom> GetById(string id)
+        public Task<LineChatRoom?> GetById(string id)
             => this.ChatRoomCollection.Find(x => x.Id == id).FirstOrDefaultAsync();
 
         public Task<List<LineChatRoom>> GetByOwner(string ownerId)

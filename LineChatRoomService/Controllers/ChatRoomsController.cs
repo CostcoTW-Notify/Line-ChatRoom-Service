@@ -1,4 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using LineChatRoomService.Models;
+using LineChatRoomService.Services.Interface;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace LineChatRoomService.Controllers
 {
@@ -6,34 +9,50 @@ namespace LineChatRoomService.Controllers
     [ApiController]
     public class ChatRoomsController : ControllerBase
     {
+        private readonly ILogger<ChatRoomsController> _log;
+
+        public IChatRoomService ChatRoomService { get; }
+
+        public ChatRoomsController(
+            ILogger<ChatRoomsController> logger,
+            IChatRoomService service)
+        {
+            this._log = logger;
+            this.ChatRoomService = service;
+        }
 
         [HttpGet]
-        public IActionResult GetAllChatRoom()
+        public async Task<List<ChatRoomViewModel>> GetAllChatRoom()
         {
-            // Get All Chat Room By UserId
-            throw new NotImplementedException();
+            var results = await ChatRoomService.GetAllChatRooms();
+            return results.ToList();
         }
 
         [HttpGet("{chatRoomId}")]
-        public IActionResult GetChatRoomById(string chatRoomId)
+        public async Task<ChatRoomViewModel?> GetChatRoomById(string chatRoomId)
         {
-            // Get ChatRoom By Room Id note: need to check room owner
-            throw new NotImplementedException();
+            var result = await ChatRoomService.GetChatRoomById(chatRoomId);
+            return result;
         }
 
 
         [HttpPatch("{chatRoomId}")]
-        public IActionResult UpdateChatRoomInfo(string chatRoomId)
+        public async Task<IActionResult> UpdateChatRoomInfo([FromRoute] string chatRoomId, [FromBody] ChatRoomViewModel model)
         {
-            // Update Room notify type
-            throw new NotImplementedException();
+            model.Id = chatRoomId;
+
+            if (model.Subscriptions is null)
+                return BadRequest("Subscriptions is required");
+
+            await ChatRoomService.UpdateChatRoom(model);
+
+            return Ok();
         }
 
         [HttpDelete("{chatRoomId}")]
-        public string RemoveChatRoomById(string chatRoomId)
+        public async Task RemoveChatRoomById(string chatRoomId)
         {
-            // Remove Room and revoke token
-            throw new NotImplementedException();
+            await this.ChatRoomService.RevokeChatRoom(chatRoomId);
         }
 
 

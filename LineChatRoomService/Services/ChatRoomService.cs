@@ -1,4 +1,7 @@
-﻿using LineChatRoomService.Models.Mongo;
+﻿using LineChatRoomService.Extensions;
+using LineChatRoomService.Extensions.ModelMapper;
+using LineChatRoomService.Models;
+using LineChatRoomService.Models.Mongo;
 using LineChatRoomService.Repositories.Interface;
 using LineChatRoomService.Services.Interface;
 
@@ -7,28 +10,40 @@ namespace LineChatRoomService.Services
     public class ChatRoomService : IChatRoomService
     {
 
+        private readonly ILogger<ChatRoomService> logger;
+
+        public IChatRoomRepository ChatRoomRepo { get; }
+
+        public ILineNotifyService LineNotifyService { get; }
+
+        public readonly HttpContext? HttpContext;
+
+        public string? UserId { get => this.HttpContext?.GetUserId(); }
+
+
         public ChatRoomService(
+            ILogger<ChatRoomService> logger,
             IHttpContextAccessor httpContextAccessor,
             ILineNotifyService service,
             IChatRoomRepository repo)
         {
+            this.logger = logger;
             this.ChatRoomRepo = repo;
             this.LineNotifyService = service;
-            this.UserId = httpContextAccessor.HttpContext!.User.Claims
-                                             .Where(x => x.Type == "sub")
-                                             .FirstOrDefault()?.Value;
+            this.HttpContext = httpContextAccessor.HttpContext;
         }
 
-        public IChatRoomRepository ChatRoomRepo { get; }
-        public ILineNotifyService LineNotifyService { get; }
-        public string? UserId { get; }
+
 
         public async Task CreateChatRoom(string ownerdId, string token)
         {
             var info = await LineNotifyService.GetChatRoomInfomation(token);
 
             if (info is null || string.IsNullOrWhiteSpace(info.targetType) || string.IsNullOrWhiteSpace(info.target))
-                throw new Exception("Cannot get chat room information");
+            {
+                await LineNotifyService.RevokeChatRoom(token);
+                throw new Exception("Cannot get chat room information... try revoke token...");
+            }
 
             var chatRoom = new LineChatRoom
             {
@@ -39,7 +54,7 @@ namespace LineChatRoomService.Services
             };
 
             var newChatRoom = await ChatRoomRepo.Create(chatRoom);
-            Console.WriteLine($"User: {ownerdId} create new chat room: {newChatRoom.Id}");
+            logger.LogInformation($"User: {ownerdId} create new chat room: {newChatRoom.Id}");
         }
 
         public async Task RevokeChatRoom(string roomId)
@@ -49,13 +64,9 @@ namespace LineChatRoomService.Services
 
             var chatRoom = await this.ChatRoomRepo.GetById(roomId);
 
-            if (chatRoom is null)
-                throw new ArgumentException(nameof(roomId));
+            EnsureChatRoomExists(chatRoom);
 
-            if (chatRoom.OwnerId != UserId)
-                throw new Exception("Access Denied");
-
-            var token = chatRoom.Token;
+            var token = chatRoom!.Token;
             await this.ChatRoomRepo.Delete(chatRoom);
             await this.LineNotifyService.RevokeChatRoom(token!);
         }
@@ -67,20 +78,64 @@ namespace LineChatRoomService.Services
 
             var chatRoom = await this.ChatRoomRepo.GetById(roomId);
 
-            if (chatRoom is null)
-                throw new ArgumentException(nameof(roomId));
+            EnsureChatRoomExists(chatRoom);
 
-            if (chatRoom.OwnerId != UserId)
-                throw new Exception("Access Denied");
-
-            var token = chatRoom.Token;
+            var token = chatRoom!.Token;
             var result = await this.LineNotifyService.SendMessage(token, testMessage);
             return result;
         }
 
-        public Task UpdateChatRoom(LineChatRoom charRoom)
+
+        public async Task<IEnumerable<ChatRoomViewModel>> GetAllChatRooms()
         {
-            throw new NotImplementedException();
+            var chatRooms = await this.ChatRoomRepo.GetByOwner(this.UserId!);
+
+            var viewModels = chatRooms.Select(x => x.ToChatRoomViewModel());
+
+            return viewModels;
+        }
+
+        public async Task<ChatRoomViewModel?> GetChatRoomById(string roomId)
+        {
+            var chatRoom = await this.ChatRoomRepo.GetById(roomId);
+
+            EnsureChatRoomExists(chatRoom);
+
+            var viewModel = chatRoom!.ToChatRoomViewModel();
+            return viewModel;
+        }
+
+        public async Task UpdateChatRoom(ChatRoomViewModel model)
+        {
+            if (string.IsNullOrWhiteSpace(model.Id))
+                throw new ArgumentException(nameof(model));
+
+            var chatRoom = await this.ChatRoomRepo.GetById(model.Id!);
+
+            EnsureChatRoomExists(chatRoom);
+
+            var subs = model.Subscriptions;
+
+            if (subs is null)
+                throw new ArgumentNullException(nameof(model.Subscriptions));
+
+            if (subs.DailyNewOnSale is not null)
+                chatRoom.Subscriptions.DailyNewOnSale = subs.DailyNewOnSale.Value;
+
+            if (subs.DailyNewBestBuy is not null)
+                chatRoom.Subscriptions.DailyNewBestBuy = subs.DailyNewBestBuy.Value;
+
+            if (subs.InventoryCheckList is not null)
+                chatRoom.Subscriptions.InventoryCheckList = subs.InventoryCheckList;
+
+            await this.ChatRoomRepo.Update(chatRoom);
+
+        }
+
+        private void EnsureChatRoomExists(LineChatRoom? chatRoom)
+        {
+            if (chatRoom is null || chatRoom.OwnerId != this.UserId)
+                throw new Exception("the specific room id is not exists");
         }
     }
 }

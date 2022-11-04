@@ -12,6 +12,8 @@ namespace LineChatRoomService.Services
 
     public class LineNotifyService : ILineNotifyService
     {
+        private readonly ILogger<LineNotifyService> _log;
+
         public string ClientId { get; }
 
         public string ClientSecret { get; }
@@ -30,9 +32,11 @@ namespace LineChatRoomService.Services
 
 
         public LineNotifyService(
+            ILogger<LineNotifyService> logger,
             IHttpClientFactory clientFactory,
             IHttpContextAccessor httpContextAccessor)
         {
+            this._log = logger;
             ClientId = Environment.GetEnvironmentVariable("line_client_id")!;
             ClientSecret = Environment.GetEnvironmentVariable("line_client_secret")!;
             Aes = GetAes();
@@ -54,6 +58,7 @@ namespace LineChatRoomService.Services
         {
             public string? RedirectUrl { get; set; }
             public string? User { get; set; }
+            public DateTime? CreateAt { get; set; } = DateTime.Now;
         }
 
         public string GenerateState(string redirectUri, string user)
@@ -69,15 +74,17 @@ namespace LineChatRoomService.Services
             return encryptState;
         }
 
-        public (string redirectUrl, string user) GetInfoFromState(string state)
+        public (string redirectUrl, string user, DateTime createAt) GetInfoFromState(string state)
         {
             var decrypt = AesHelper.DecryptString(Aes, state);
             var state_obj = JsonSerializer.Deserialize<State>(decrypt);
             if (state_obj is null ||
                 string.IsNullOrWhiteSpace(state_obj.RedirectUrl) ||
-                string.IsNullOrWhiteSpace(state_obj.User))
-                throw new Exception("Cannot get infomation from state..");
-            return (state_obj.RedirectUrl, state_obj.User);
+                string.IsNullOrWhiteSpace(state_obj.User) ||
+                state_obj.CreateAt is null)
+                throw new Exception("wrong state..");
+
+            return (state_obj.RedirectUrl, state_obj.User, state_obj.CreateAt.Value);
         }
 
 
@@ -119,7 +126,7 @@ namespace LineChatRoomService.Services
             if (!response.IsSuccessStatusCode)
             {
                 var error = response.Content.ReadAsStringAsync();
-                Console.WriteLine(error);
+                _log.LogError("Exchange token fail... response : " + error);
             }
 
             var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -170,7 +177,11 @@ namespace LineChatRoomService.Services
             if (!response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadAsStringAsync();
-                Console.WriteLine(result);
+                _log.LogError($"Revoke chat room token fail... respoinse : {result}");
+            }
+            else
+            {
+                _log.LogInformation($"Revoke chat room token : {token}");
             }
         }
 

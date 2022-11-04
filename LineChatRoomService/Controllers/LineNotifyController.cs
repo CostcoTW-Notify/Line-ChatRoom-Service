@@ -8,6 +8,12 @@ namespace LineChatRoomService.Controllers
 
     public class LineNotifyController : Controller
     {
+        private readonly ILogger<LineNotifyController> _log;
+
+        public LineNotifyController(ILogger<LineNotifyController> logger)
+        {
+            this._log = logger;
+        }
 
         [HttpGet("/LineNotify/RegisterChatRoomUrl")]
         public IActionResult CreateNewChatRoom(
@@ -21,8 +27,12 @@ namespace LineChatRoomService.Controllers
                 });
             var user = HttpContext.GetUserId();
 
-            var url = service.BuildChallengeUrl(redirect_uri, user);
-            return Ok(url);
+            var url = service.BuildChallengeUrl(redirect_uri, user!);
+
+            return Ok(new
+            {
+                Register_Url = url
+            });
         }
 
 
@@ -37,22 +47,22 @@ namespace LineChatRoomService.Controllers
             if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state))
                 return BadRequest();
 
-            var (redirectUrl, user) = lineService.GetInfoFromState(state);
+
+            var (redirectUrl, user, _) = lineService.GetInfoFromState(state);
 
             var token = await lineService.ExchangeCodeAsync(code);
 
-            if (string.IsNullOrEmpty(token))
-                return BadRequest();
+            if (!string.IsNullOrEmpty(token))
+                try
+                {
+                    await chatRoomService.CreateChatRoom(user, token);
+                }
+                catch (Exception ex)
+                {
+                    _log.LogError("Create room caught.. " + ex.ToString());
+                    await lineService.RevokeChatRoom(token);
 
-            try
-            {
-                await chatRoomService.CreateChatRoom(user, token);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex);
-                await lineService.RevokeChatRoom(token);
-            }
+                }
 
             return Redirect(redirectUrl);
         }

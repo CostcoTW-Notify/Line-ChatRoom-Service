@@ -8,7 +8,7 @@ namespace LineChatRoomService.Services.Interface
 
         Task<string?> ExchangeCodeAsync(string code);
 
-        (string redirectUrl, string user) GetInfoFromState(string state);
+        (string redirectUrl, string user, DateTime createAt) GetInfoFromState(string state);
 
         Task<ChatRoomInformation?> GetChatRoomInfomation(string token);
 

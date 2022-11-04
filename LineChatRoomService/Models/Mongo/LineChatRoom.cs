@@ -19,5 +19,10 @@ namespace LineChatRoomService.Models.Mongo
         public string? Token { get; set; }
 
         public DateTime CreateAt { get; set; } = DateTime.Now;
+
+        public Subscriptions Subscriptions { get; set; } = new Subscriptions();
     }
+
+
+
 }
