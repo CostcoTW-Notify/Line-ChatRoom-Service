@@ -1,5 +1,4 @@
 ﻿using LineChatRoomService.Models;
-using LineChatRoomService.Repositories.Interface;
 using LineChatRoomService.Services.Interface;
 using LineChatRoomService.Utility;
 using Microsoft.AspNetCore.WebUtilities;
@@ -47,7 +46,7 @@ namespace LineChatRoomService.Services
         private Aes GetAes()
         {
             var aes = Aes.Create();
-            var aesKey = Convert.FromBase64String(Environment.GetEnvironmentVariable("AES-Key")!);
+            var aesKey = Convert.FromBase64String(Environment.GetEnvironmentVariable("AES-KEY")!);
             var aesIv = Convert.FromBase64String(Environment.GetEnvironmentVariable("AES-IV")!);
             aes.Key = aesKey;
             aes.IV = aesIv;
@@ -118,7 +117,6 @@ namespace LineChatRoomService.Services
 
 
             using var request = new HttpRequestMessage(HttpMethod.Post, TokenEndpoint);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             request.Content = new FormUrlEncodedContent(tokenRequestParameters);
 
             var client = CreateHttpClient();
@@ -140,7 +138,6 @@ namespace LineChatRoomService.Services
         public async Task<ChatRoomInformation?> GetChatRoomInfomation(string roomToken)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, ChatRoomStateEndpoint);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             var httpClient = CreateHttpClient(roomToken);
             using var response = await httpClient.SendAsync(request);
@@ -156,16 +153,26 @@ namespace LineChatRoomService.Services
         {
             var message = new Dictionary<string, string>
             {
-                ["message"] = testMessage,
+                ["message"] = "\n" + testMessage,
             };
 
+            var client = CreateHttpClient(token);
+
             using var request = new HttpRequestMessage(HttpMethod.Post, SendMessageEndpoint);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             request.Content = new FormUrlEncodedContent(message);
 
-            var client = CreateHttpClient(token);
             using var response = await client.SendAsync(request);
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadAsStringAsync();
+                return true;
+            }
+            else
+            {
+                var result = await response.Content.ReadAsStringAsync();
+                Console.WriteLine("Send Test message fail ..." + result);
+                return false;
+            }
         }
 
         public async Task RevokeChatRoom(string token)
@@ -188,7 +195,7 @@ namespace LineChatRoomService.Services
 
         private HttpClient CreateHttpClient(string? roomToken = null)
         {
-            var httpClient = HttpClientFactory.CreateClient();
+            var httpClient = HttpClientFactory.CreateClient("default");
             if (!string.IsNullOrWhiteSpace(roomToken))
                 httpClient.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", roomToken);

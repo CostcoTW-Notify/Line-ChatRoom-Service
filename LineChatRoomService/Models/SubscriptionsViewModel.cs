@@ -15,6 +15,6 @@
         /// <summary>
         /// 庫存通知商品 Code
         /// </summary>
-        public List<string>? InventoryCheckList { set; get; }
+        public Dictionary<string, string>? InventoryCheckList { set; get; }
     }
 }

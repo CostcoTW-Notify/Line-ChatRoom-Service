@@ -55,6 +55,22 @@ namespace LineChatRoomService.Controllers
             await this.ChatRoomService.RevokeChatRoom(chatRoomId);
         }
 
+        [HttpPost("{chatRoomId}/SendTestMessage")]
+        public async Task<IActionResult> SendTestMessage(string chatRoomId, [FromBody] SendMessageModel model)
+        {
+
+            if (string.IsNullOrWhiteSpace(model.Message))
+                return BadRequest();
+
+            var message = $"以下是您所發送的測試訊息 :\n{model.Message}";
+
+            var result = await this.ChatRoomService.SendMessageToChatRoom(chatRoomId, message);
+
+            if (result)
+                return Ok();
+            else
+                return BadRequest();
+        }
 
     }
 

@@ -4,6 +4,7 @@ using LineChatRoomService.Models;
 using LineChatRoomService.Models.Mongo;
 using LineChatRoomService.Repositories.Interface;
 using LineChatRoomService.Services.Interface;
+using System.Net.Http.Json;
 
 namespace LineChatRoomService.Services
 {
@@ -13,10 +14,12 @@ namespace LineChatRoomService.Services
         private readonly ILogger<ChatRoomService> logger;
 
         public IChatRoomRepository ChatRoomRepo { get; }
-
+        public IInventoryCheckRepository InventoryCheckRepo { get; }
         public ILineNotifyService LineNotifyService { get; }
 
         public readonly HttpContext? HttpContext;
+
+        public IHttpClientFactory HttpClientFactory { get; }
 
         public string? UserId { get => this.HttpContext?.GetUserId(); }
 
@@ -24,13 +27,17 @@ namespace LineChatRoomService.Services
         public ChatRoomService(
             ILogger<ChatRoomService> logger,
             IHttpContextAccessor httpContextAccessor,
+            IHttpClientFactory httpClientFactory,
             ILineNotifyService service,
-            IChatRoomRepository repo)
+            IChatRoomRepository chatRoomRepo,
+            IInventoryCheckRepository inventoryCheckRepo)
         {
             this.logger = logger;
-            this.ChatRoomRepo = repo;
+            this.ChatRoomRepo = chatRoomRepo;
+            this.InventoryCheckRepo = inventoryCheckRepo;
             this.LineNotifyService = service;
             this.HttpContext = httpContextAccessor.HttpContext;
+            this.HttpClientFactory = httpClientFactory;
         }
 
 
@@ -67,6 +74,7 @@ namespace LineChatRoomService.Services
             EnsureChatRoomExists(chatRoom);
 
             var token = chatRoom!.Token;
+            await this.UpdateInventoryCheckItems(chatRoom!.Id!, new string[] { });
             await this.ChatRoomRepo.Delete(chatRoom);
             await this.LineNotifyService.RevokeChatRoom(token!);
         }
@@ -90,7 +98,32 @@ namespace LineChatRoomService.Services
         {
             var chatRooms = await this.ChatRoomRepo.GetByOwner(this.UserId!);
 
-            var viewModels = chatRooms.Select(x => x.ToChatRoomViewModel());
+            var subsItem = chatRooms.SelectMany(x => x.Subscriptions.InventoryCheckList);
+
+            var itemNames = new Dictionary<string, string>();
+
+            foreach (var code in subsItem)
+            {
+                var item = await this.InventoryCheckRepo.GetByItemCode(code);
+                if (item is null)
+                    itemNames[code] = "unknown";
+                else
+                    itemNames[code] = item.Name;
+
+            }
+
+            var viewModels = chatRooms.Select(x => x.ToChatRoomViewModel()).ToList();
+
+            viewModels.ForEach(r =>
+            {
+                if (r.Subscriptions?.InventoryCheckList is null)
+                    return;
+
+                foreach (var code in r.Subscriptions.InventoryCheckList.Keys)
+                {
+                    r.Subscriptions.InventoryCheckList[code] = itemNames[code];
+                }
+            });
 
             return viewModels;
         }
@@ -101,7 +134,28 @@ namespace LineChatRoomService.Services
 
             EnsureChatRoomExists(chatRoom);
 
+            var subsItem = chatRoom!.Subscriptions.InventoryCheckList;
+
+            var itemNames = new Dictionary<string, string>();
+
+            foreach (var code in subsItem)
+            {
+                var item = await this.InventoryCheckRepo.GetByItemCode(code);
+                if (item is null)
+                    itemNames[code] = "unknown";
+                else
+                    itemNames[code] = item.Name;
+
+            }
+
             var viewModel = chatRoom!.ToChatRoomViewModel();
+
+            if (viewModel.Subscriptions?.InventoryCheckList is not null)
+                foreach (var code in viewModel.Subscriptions.InventoryCheckList.Keys)
+                {
+                    viewModel.Subscriptions.InventoryCheckList[code] = itemNames[code];
+                }
+
             return viewModel;
         }
 
@@ -114,21 +168,96 @@ namespace LineChatRoomService.Services
 
             EnsureChatRoomExists(chatRoom);
 
-            var subs = model.Subscriptions;
 
-            if (subs is null)
+            if (model.Subscriptions is null)
                 throw new ArgumentNullException(nameof(model.Subscriptions));
 
-            if (subs.DailyNewOnSale is not null)
-                chatRoom.Subscriptions.DailyNewOnSale = subs.DailyNewOnSale.Value;
+            if (model.Subscriptions.DailyNewOnSale is not null)
+                chatRoom!.Subscriptions.DailyNewOnSale = model.Subscriptions.DailyNewOnSale.Value;
 
-            if (subs.DailyNewBestBuy is not null)
-                chatRoom.Subscriptions.DailyNewBestBuy = subs.DailyNewBestBuy.Value;
+            if (model.Subscriptions.DailyNewBestBuy is not null)
+                chatRoom!.Subscriptions.DailyNewBestBuy = model.Subscriptions.DailyNewBestBuy.Value;
 
-            if (subs.InventoryCheckList is not null)
-                chatRoom.Subscriptions.InventoryCheckList = subs.InventoryCheckList;
+            if (model.Subscriptions.InventoryCheckList is not null)
+            {
+                chatRoom!.Subscriptions.InventoryCheckList = model.Subscriptions.InventoryCheckList.Keys.ToList();
+                await UpdateInventoryCheckItems(chatRoom.Id!, chatRoom.Subscriptions.InventoryCheckList);
+            }
 
-            await this.ChatRoomRepo.Update(chatRoom);
+            await this.ChatRoomRepo.Update(chatRoom!);
+
+        }
+
+
+        private async Task UpdateInventoryCheckItems(string chatRoomId, IEnumerable<string> items)
+        {
+            var chatRoom = await this.ChatRoomRepo.GetById(chatRoomId);
+            if (chatRoom is null)
+                throw new Exception("ChatRoom not exists");
+            var current = chatRoom.Subscriptions.InventoryCheckList;
+
+            var unsubscriptionItems = current.Except(items);
+
+            var newSubscriptionItems = items.Except(current);
+
+            foreach (var code in unsubscriptionItems)
+            {
+                var checkItem = await this.InventoryCheckRepo.GetByItemCode(code);
+
+                if (checkItem is null)
+                    continue;
+
+                if (checkItem.SubscriptionChatRoom.Contains(chatRoomId))
+                {
+                    var newSubsChatRooms = checkItem.SubscriptionChatRoom.ToHashSet();
+                    newSubsChatRooms.Remove(chatRoomId);
+                    checkItem.SubscriptionChatRoom = newSubsChatRooms.ToArray();
+
+                    if (newSubsChatRooms.Count == 0)
+                        await this.InventoryCheckRepo.DeleteCheckItemByCode(checkItem.Code);
+                    else
+                        await this.InventoryCheckRepo.UpdateCheckItem(checkItem);
+                }
+
+            }
+
+            var client = this.HttpClientFactory.CreateClient("default");
+
+            foreach (var code in newSubscriptionItems)
+            {
+                var checkItem = await this.InventoryCheckRepo.GetByItemCode(code);
+                if (checkItem is null)
+                {
+                    var result = await client.GetFromJsonAsync<CostcoProductInformation>($"https://www.costco.com.tw/rest/v2/taiwan/metadata/productDetails?code={code}");
+                    //var req = new HttpRequestMessage(HttpMethod.Get, $"https://www.costco.com.tw/rest/v2/taiwan/metadata/productDetails?code={code}");
+
+                    //var response = await client.SendAsync(req);
+
+                    //if (!response.IsSuccessStatusCode)
+                    //    continue;
+
+                    //var result = await response.Content.ReadFromJsonAsync<CostcoProductInformation>();
+
+                    if (result is null || string.IsNullOrWhiteSpace(result.MetaTitle))
+                        continue;
+
+                    var newItem = new InventoryCheckItem
+                    {
+                        Code = code,
+                        Name = result.MetaTitle,
+                        SubscriptionChatRoom = new[] { chatRoomId }
+                    };
+
+                    await this.InventoryCheckRepo.CreateNewCheckItem(newItem);
+                }
+                else
+                {
+                    var newSubsChatRooms = checkItem.SubscriptionChatRoom.ToHashSet();
+                    newSubsChatRooms.Add(chatRoomId);
+                    checkItem.SubscriptionChatRoom = newSubsChatRooms.ToArray();
+                    await this.InventoryCheckRepo.UpdateCheckItem(checkItem);
+                }
+            }
 
         }
 

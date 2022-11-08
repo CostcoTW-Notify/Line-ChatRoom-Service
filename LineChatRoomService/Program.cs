@@ -8,6 +8,9 @@ using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
 using System.Security.Claims;
 
+
+EnsureEnv();
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -29,11 +32,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     options.IncludeErrorDetails = true;
                 })
                 ;
-builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("default", options =>
+{
+    options.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 CostcoTW-Notify/0.1");
+    options.DefaultRequestHeaders.Add("Accept", "application/json");
+});
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ILineNotifyService, LineNotifyService>();
 builder.Services.AddScoped<IChatRoomService, ChatRoomService>();
 builder.Services.AddSingleton<IChatRoomRepository, ChatRoomRepository>();
+builder.Services.AddSingleton<IInventoryCheckRepository, InventoryCheckRepository>();
 builder.Services.AddSingleton(c =>
 {
     var connStr = Environment.GetEnvironmentVariable("mongo_conn_str")!;
@@ -72,6 +80,7 @@ app.Use(async (context, next) =>
     catch (Exception ex)
     {
         context.Response.StatusCode = 400;
+        Console.Error.WriteLine("Request caught ex: " + ex);
         await context.Response.WriteAsJsonAsync(new
         {
             error_message = ex.Message.ToString()
@@ -100,5 +109,12 @@ app.Run();
 
 static void EnsureEnv()
 {
+    var aesKey = Environment.GetEnvironmentVariable("AES-KEY");
+    var aesIv = Environment.GetEnvironmentVariable("AES-IV");
+    var lineClientId = Environment.GetEnvironmentVariable("line_client_id");
+    var lineClientSecret = Environment.GetEnvironmentVariable("line_client_secret");
+    var mongo_connStr = Environment.GetEnvironmentVariable("mongo_conn_str");
 
+    if (new[] { aesKey, aesIv, lineClientId, lineClientSecret, mongo_connStr }.Any(x => string.IsNullOrWhiteSpace(x)))
+        throw new Exception("EnvironmentVariable setup fail...");
 }

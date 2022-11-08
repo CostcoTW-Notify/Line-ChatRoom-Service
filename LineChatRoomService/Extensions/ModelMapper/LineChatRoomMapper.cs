@@ -22,7 +22,7 @@ namespace LineChatRoomService.Extensions.ModelMapper
             {
                 DailyNewBestBuy = subscriptions.DailyNewBestBuy,
                 DailyNewOnSale = subscriptions.DailyNewOnSale,
-                InventoryCheckList = subscriptions.InventoryCheckList,
+                InventoryCheckList = subscriptions.InventoryCheckList.ToDictionary(k => k),
             };
 
     }
