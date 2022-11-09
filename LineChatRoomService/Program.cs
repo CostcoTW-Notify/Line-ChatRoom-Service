@@ -34,9 +34,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 ;
 builder.Services.AddHttpClient("default", options =>
 {
-    options.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 CostcoTW-Notify/0.1");
+    // For GCP Cloud run
+    options.DefaultRequestHeaders.Add("User-Agent", "python-httpx/0.23.0 CostcoTW-Notify/0.1");
     options.DefaultRequestHeaders.Add("Accept", "application/json");
+    options.Timeout = TimeSpan.FromSeconds(10);
 });
+
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ILineNotifyService, LineNotifyService>();
 builder.Services.AddScoped<IChatRoomService, ChatRoomService>();

@@ -5,6 +5,7 @@ using LineChatRoomService.Models.Mongo;
 using LineChatRoomService.Repositories.Interface;
 using LineChatRoomService.Services.Interface;
 using System.Net.Http.Json;
+using System.Text;
 
 namespace LineChatRoomService.Services
 {
@@ -186,6 +187,17 @@ namespace LineChatRoomService.Services
 
             await this.ChatRoomRepo.Update(chatRoom!);
 
+            var sb = new StringBuilder();
+            sb.Append(" 商品監測設定已變更如下\n");
+            // 2705 : V  40DA : X
+            sb.Append($"新特價商品通知:  " + (chatRoom!.Subscriptions.DailyNewOnSale ? "\u2714" : "\u2718") + "\n");
+            sb.Append($"新最低價商品通知:  " + (chatRoom!.Subscriptions.DailyNewBestBuy ? "\u2714" : "\u2718") + "\n");
+            sb.Append($"庫存監控商品: \n");
+            chatRoom.Subscriptions.InventoryCheckList.ForEach(x =>
+            {
+                sb.Append($"#{x}\n");
+            });
+            await this.SendMessageToChatRoom(chatRoom.Id!, sb.ToString());
         }
 
 
