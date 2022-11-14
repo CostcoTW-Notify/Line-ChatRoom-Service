@@ -14,7 +14,7 @@ namespace LineChatRoomService.Models.Mongo
 
         public string Name { get; set; }
 
-        public string[] SubscriptionChatRoom { get; set; }
+        public ObjectId[] SubscriptionChatRoom { get; set; }
 
     }
 }

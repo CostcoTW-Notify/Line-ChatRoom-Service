@@ -1,9 +1,12 @@
 ﻿using LineChatRoomService.Extensions;
 using LineChatRoomService.Extensions.ModelMapper;
 using LineChatRoomService.Models;
+using LineChatRoomService.Models.Microservice;
 using LineChatRoomService.Models.Mongo;
 using LineChatRoomService.Repositories.Interface;
 using LineChatRoomService.Services.Interface;
+using LineChatRoomService.Utility;
+using MongoDB.Bson;
 using System.Net.Http.Json;
 using System.Text;
 
@@ -22,6 +25,8 @@ namespace LineChatRoomService.Services
 
         public IHttpClientFactory HttpClientFactory { get; }
 
+        public ISubscriptionService SubscriptionService { get; }
+
         public string? UserId { get => this.HttpContext?.GetUserId(); }
 
 
@@ -31,7 +36,8 @@ namespace LineChatRoomService.Services
             IHttpClientFactory httpClientFactory,
             ILineNotifyService service,
             IChatRoomRepository chatRoomRepo,
-            IInventoryCheckRepository inventoryCheckRepo)
+            IInventoryCheckRepository inventoryCheckRepo,
+            ISubscriptionService subscriptionService)
         {
             this.logger = logger;
             this.ChatRoomRepo = chatRoomRepo;
@@ -39,6 +45,7 @@ namespace LineChatRoomService.Services
             this.LineNotifyService = service;
             this.HttpContext = httpContextAccessor.HttpContext;
             this.HttpClientFactory = httpClientFactory;
+            this.SubscriptionService = subscriptionService;
         }
 
 
@@ -78,6 +85,7 @@ namespace LineChatRoomService.Services
             await this.UpdateInventoryCheckItems(chatRoom!.Id!, new string[] { });
             await this.ChatRoomRepo.Delete(chatRoom);
             await this.LineNotifyService.RevokeChatRoom(token!);
+            await this.SubscriptionService.DeleteAllSubscription(token!);
         }
 
         public async Task<bool> SendMessageToChatRoom(string roomId, string testMessage)
@@ -174,10 +182,26 @@ namespace LineChatRoomService.Services
                 throw new ArgumentNullException(nameof(model.Subscriptions));
 
             if (model.Subscriptions.DailyNewOnSale is not null)
+            {
                 chatRoom!.Subscriptions.DailyNewOnSale = model.Subscriptions.DailyNewOnSale.Value;
+                await this.SubscriptionService.ChangeSubscription(
+                        changeType: model.Subscriptions.DailyNewOnSale.Value ? ChangeSubscriptionType.Create : ChangeSubscriptionType.Delete,
+                        token: chatRoom.Token!,
+                        subscriptionType: SubscriptionType.DailyNewOnsale,
+                        code: null
+                    );
+            }
 
             if (model.Subscriptions.DailyNewBestBuy is not null)
+            {
                 chatRoom!.Subscriptions.DailyNewBestBuy = model.Subscriptions.DailyNewBestBuy.Value;
+                await this.SubscriptionService.ChangeSubscription(
+                        changeType: model.Subscriptions.DailyNewBestBuy.Value ? ChangeSubscriptionType.Create : ChangeSubscriptionType.Delete,
+                        token: chatRoom.Token!,
+                        subscriptionType: SubscriptionType.DailyNewBestBuy,
+                        code: null
+                    );
+            }
 
             if (model.Subscriptions.InventoryCheckList is not null)
             {
@@ -203,9 +227,15 @@ namespace LineChatRoomService.Services
 
         private async Task UpdateInventoryCheckItems(string chatRoomId, IEnumerable<string> items)
         {
+            // Send to Subscription microservice task
+            var unsubTask = new List<Task>();
+            var subTask = new List<Task>();
+
             var chatRoom = await this.ChatRoomRepo.GetById(chatRoomId);
             if (chatRoom is null)
                 throw new Exception("ChatRoom not exists");
+
+            var oid = new ObjectId(chatRoom.Id);
             var current = chatRoom.Subscriptions.InventoryCheckList;
 
             var unsubscriptionItems = current.Except(items);
@@ -219,10 +249,10 @@ namespace LineChatRoomService.Services
                 if (checkItem is null)
                     continue;
 
-                if (checkItem.SubscriptionChatRoom.Contains(chatRoomId))
+                if (checkItem.SubscriptionChatRoom.Contains(oid))
                 {
                     var newSubsChatRooms = checkItem.SubscriptionChatRoom.ToHashSet();
-                    newSubsChatRooms.Remove(chatRoomId);
+                    newSubsChatRooms.Remove(new ObjectId(chatRoomId));
                     checkItem.SubscriptionChatRoom = newSubsChatRooms.ToArray();
 
                     if (newSubsChatRooms.Count == 0)
@@ -231,24 +261,20 @@ namespace LineChatRoomService.Services
                         await this.InventoryCheckRepo.UpdateCheckItem(checkItem);
                 }
 
+                // Request Subscription microservice remove subescription
+                _ = unsubTask.Append(this.SubscriptionService.ChangeSubscription(
+                    ChangeSubscriptionType.Delete, chatRoom.Token!, SubscriptionType.InventoryCheck, code));
             }
 
-            var client = this.HttpClientFactory.CreateClient("default");
 
+            var client = this.HttpClientFactory.CreateClient("default");
             foreach (var code in newSubscriptionItems)
             {
                 var checkItem = await this.InventoryCheckRepo.GetByItemCode(code);
                 if (checkItem is null)
                 {
                     var result = await client.GetFromJsonAsync<CostcoProductInformation>($"https://www.costco.com.tw/rest/v2/taiwan/metadata/productDetails?code={code}");
-                    //var req = new HttpRequestMessage(HttpMethod.Get, $"https://www.costco.com.tw/rest/v2/taiwan/metadata/productDetails?code={code}");
 
-                    //var response = await client.SendAsync(req);
-
-                    //if (!response.IsSuccessStatusCode)
-                    //    continue;
-
-                    //var result = await response.Content.ReadFromJsonAsync<CostcoProductInformation>();
 
                     if (result is null || string.IsNullOrWhiteSpace(result.MetaTitle))
                         continue;
@@ -257,7 +283,7 @@ namespace LineChatRoomService.Services
                     {
                         Code = code,
                         Name = result.MetaTitle,
-                        SubscriptionChatRoom = new[] { chatRoomId }
+                        SubscriptionChatRoom = new[] { oid }
                     };
 
                     await this.InventoryCheckRepo.CreateNewCheckItem(newItem);
@@ -265,12 +291,18 @@ namespace LineChatRoomService.Services
                 else
                 {
                     var newSubsChatRooms = checkItem.SubscriptionChatRoom.ToHashSet();
-                    newSubsChatRooms.Add(chatRoomId);
+                    newSubsChatRooms.Add(oid);
                     checkItem.SubscriptionChatRoom = newSubsChatRooms.ToArray();
                     await this.InventoryCheckRepo.UpdateCheckItem(checkItem);
                 }
+
+                // Request Subscription microservice append new subescription
+                _ = unsubTask.Append(this.SubscriptionService.ChangeSubscription(
+                    ChangeSubscriptionType.Create, chatRoom.Token!, SubscriptionType.InventoryCheck, code));
             }
 
+            await Task.WhenAll(unsubTask);
+            await Task.WhenAll(subTask);
         }
 
         private void EnsureChatRoomExists(LineChatRoom? chatRoom)

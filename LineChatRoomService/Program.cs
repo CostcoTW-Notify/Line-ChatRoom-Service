@@ -50,6 +50,13 @@ builder.Services.AddSingleton(c =>
     var connStr = Environment.GetEnvironmentVariable("mongo_conn_str")!;
     return new MongoClient(connStr).GetDatabase("LineChatRoom-Service");
 });
+builder.Services.AddScoped<ISubscriptionService, SubscriptionService>(c =>
+{
+    var endpoint = Environment.GetEnvironmentVariable("Subscription_Endpoint")!;
+    var logger = c.GetRequiredService<ILogger<SubscriptionService>>();
+    var factory = c.GetRequiredService<IHttpClientFactory>();
+    return new SubscriptionService(logger, factory, endpoint);
+});
 builder.Services.AddCors(op =>
 {
     op.AddPolicy(
@@ -117,6 +124,7 @@ static void EnsureEnv()
     var lineClientId = Environment.GetEnvironmentVariable("line_client_id");
     var lineClientSecret = Environment.GetEnvironmentVariable("line_client_secret");
     var mongo_connStr = Environment.GetEnvironmentVariable("mongo_conn_str");
+    var endpoint = Environment.GetEnvironmentVariable("SubscriptionEndpoint");
 
     if (new[] { aesKey, aesIv, lineClientId, lineClientSecret, mongo_connStr }.Any(x => string.IsNullOrWhiteSpace(x)))
         throw new Exception("EnvironmentVariable setup fail...");
