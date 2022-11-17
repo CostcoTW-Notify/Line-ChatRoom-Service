@@ -43,7 +43,19 @@ builder.Services.AddHttpClient("default", options =>
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddDataProtection().PersistKeysToMongoDb(c => c.GetRequiredService<IMongoDatabase>());
-builder.Services.AddScoped<ILineNotifyService, LineNotifyService>();
+builder.Services.AddScoped<ILineNotifyService>(c =>
+{
+    var lineClientId = Environment.GetEnvironmentVariable("line_client_id");
+    var lineClientSecret = Environment.GetEnvironmentVariable("line_client_secret");
+    var service = new LineNotifyService(c.GetRequiredService<ILogger<LineNotifyService>>(),
+                                        lineClientId!,
+                                        lineClientSecret!,
+                                        c.GetRequiredService<IHttpClientFactory>(),
+                                        c.GetRequiredService<IHttpContextAccessor>(),
+                                        c.GetRequiredService<IDataProtectionProvider>()
+                                        );
+    return service;
+});
 builder.Services.AddScoped<IChatRoomService, ChatRoomService>();
 builder.Services.AddSingleton<IChatRoomRepository, ChatRoomRepository>();
 builder.Services.AddSingleton<IInventoryCheckRepository, InventoryCheckRepository>();

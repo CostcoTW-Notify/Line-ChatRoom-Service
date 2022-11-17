@@ -1,10 +1,8 @@
 ﻿using LineChatRoomService.Models;
 using LineChatRoomService.Services.Interface;
-using LineChatRoomService.Utility;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.WebUtilities;
 using System.Net.Http.Headers;
-using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace LineChatRoomService.Services
@@ -34,13 +32,15 @@ namespace LineChatRoomService.Services
 
         public LineNotifyService(
             ILogger<LineNotifyService> logger,
+            string lineClientId,
+            string lineClientSecret,
             IHttpClientFactory clientFactory,
             IHttpContextAccessor httpContextAccessor,
             IDataProtectionProvider provider)
         {
             this._log = logger;
-            ClientId = Environment.GetEnvironmentVariable("line_client_id")!;
-            ClientSecret = Environment.GetEnvironmentVariable("line_client_secret")!;
+            ClientId = lineClientId;
+            ClientSecret = lineClientSecret;
             HttpClientFactory = clientFactory;
             HttpContext = httpContextAccessor.HttpContext;
             this.DataProtectionProvider = provider;
