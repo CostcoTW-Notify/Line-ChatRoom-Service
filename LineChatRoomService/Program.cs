@@ -62,10 +62,15 @@ builder.Services.AddScoped<ISubscriptionService, SubscriptionService>(c =>
 builder.Services.AddCors(op =>
 {
     op.AddPolicy(
-        name: "AllowAll",
+        name: "Allow-GitHub.io-SPA-App",
         policy =>
         {
-            policy.AllowAnyOrigin();
+            policy.WithOrigins(
+                "https://costcotw-notify.github.io",
+                "http://localhost:5173",
+                "http://127.0.0.1:5173",
+                "http://192.168.2.6:5173"
+                );
             policy.AllowAnyMethod();
             policy.AllowAnyHeader();
         });
@@ -102,19 +107,14 @@ app.Use(async (context, next) =>
 // Configure the HTTP request pipeline.
 app.UseSwagger();
 app.UseSwaggerUI();
-app.UseCors("AllowAll");
+app.UseCors("Allow-GitHub.io-SPA-App");
 
-//app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
-app.Map("/api/test2", async (HttpContext context, ClaimsPrincipal principal) =>
-{
-    return "ok";
-});
 
 app.Run();
 
