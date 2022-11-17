@@ -4,6 +4,7 @@ using LineChatRoomService.Services;
 using LineChatRoomService.Services.Interface;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
 using System.Security.Claims;
@@ -41,6 +42,7 @@ builder.Services.AddHttpClient("default", options =>
 });
 
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddDataProtection().PersistKeysToMongoDb(c => c.GetRequiredService<IMongoDatabase>());
 builder.Services.AddScoped<ILineNotifyService, LineNotifyService>();
 builder.Services.AddScoped<IChatRoomService, ChatRoomService>();
 builder.Services.AddSingleton<IChatRoomRepository, ChatRoomRepository>();
