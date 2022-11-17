@@ -121,13 +121,11 @@ app.Run();
 
 static void EnsureEnv()
 {
-    var aesKey = Environment.GetEnvironmentVariable("AES-KEY");
-    var aesIv = Environment.GetEnvironmentVariable("AES-IV");
     var lineClientId = Environment.GetEnvironmentVariable("line_client_id");
     var lineClientSecret = Environment.GetEnvironmentVariable("line_client_secret");
     var mongo_connStr = Environment.GetEnvironmentVariable("mongo_conn_str");
     var endpoint = Environment.GetEnvironmentVariable("SubscriptionEndpoint");
 
-    if (new[] { aesKey, aesIv, lineClientId, lineClientSecret, mongo_connStr }.Any(x => string.IsNullOrWhiteSpace(x)))
+    if (new[] { lineClientId, lineClientSecret, mongo_connStr }.Any(x => string.IsNullOrWhiteSpace(x)))
         throw new Exception("EnvironmentVariable setup fail...");
 }

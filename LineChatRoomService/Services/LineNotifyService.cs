@@ -1,6 +1,7 @@
 ﻿using LineChatRoomService.Models;
 using LineChatRoomService.Services.Interface;
 using LineChatRoomService.Utility;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.WebUtilities;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -17,10 +18,11 @@ namespace LineChatRoomService.Services
 
         public string ClientSecret { get; }
 
-
-        public Aes Aes { get; }
         public IHttpClientFactory HttpClientFactory { get; }
+
         public HttpContext? HttpContext { get; }
+
+        public IDataProtectionProvider DataProtectionProvider { get; }
 
         public const string CallbackEndpoint = "/LineNotify/callback";
         public const string TokenEndpoint = "https://notify-bot.line.me/oauth/token";
@@ -33,24 +35,15 @@ namespace LineChatRoomService.Services
         public LineNotifyService(
             ILogger<LineNotifyService> logger,
             IHttpClientFactory clientFactory,
-            IHttpContextAccessor httpContextAccessor)
+            IHttpContextAccessor httpContextAccessor,
+            IDataProtectionProvider provider)
         {
             this._log = logger;
             ClientId = Environment.GetEnvironmentVariable("line_client_id")!;
             ClientSecret = Environment.GetEnvironmentVariable("line_client_secret")!;
-            Aes = GetAes();
             HttpClientFactory = clientFactory;
             HttpContext = httpContextAccessor.HttpContext;
-        }
-
-        private Aes GetAes()
-        {
-            var aes = Aes.Create();
-            var aesKey = Convert.FromBase64String(Environment.GetEnvironmentVariable("AES-KEY")!);
-            var aesIv = Convert.FromBase64String(Environment.GetEnvironmentVariable("AES-IV")!);
-            aes.Key = aesKey;
-            aes.IV = aesIv;
-            return aes;
+            this.DataProtectionProvider = provider;
         }
 
         protected class State
@@ -69,14 +62,16 @@ namespace LineChatRoomService.Services
             };
 
             var jsonState = JsonSerializer.Serialize(state);
-            var encryptState = AesHelper.EncryptString(Aes, jsonState);
+            var protector = this.DataProtectionProvider.CreateProtector("line-state");
+            var encryptState = protector.Protect(jsonState);
             return encryptState;
         }
 
         public (string redirectUrl, string user, DateTime createAt) GetInfoFromState(string state)
         {
-            var decrypt = AesHelper.DecryptString(Aes, state);
-            var state_obj = JsonSerializer.Deserialize<State>(decrypt);
+            var protector = this.DataProtectionProvider.CreateProtector("line-state");
+            var json = protector.Unprotect(state);
+            var state_obj = JsonSerializer.Deserialize<State>(json);
             if (state_obj is null ||
                 string.IsNullOrWhiteSpace(state_obj.RedirectUrl) ||
                 string.IsNullOrWhiteSpace(state_obj.User) ||
