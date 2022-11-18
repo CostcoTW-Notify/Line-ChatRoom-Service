@@ -2,13 +2,9 @@
 using LineChatRoomService.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging;
-using NSubstitute;
 using System.Net;
-using System.Net.Http;
 using System.Net.Http.Json;
-using System.Security.Policy;
 
 namespace LineChatRoomServiceTest.Services
 {
@@ -141,46 +137,6 @@ namespace LineChatRoomServiceTest.Services
             Assert.Contains("response_type=code", querys);
             Assert.Contains(querys, q => q.StartsWith("redirect_uri="));
             Assert.Contains(querys, q => q.StartsWith("state="));
-        }
-    }
-
-
-    public class MockHttpMessageHandler : HttpMessageHandler
-    {
-        public HttpRequestMessage Request { get; private set; }
-
-        public IDictionary<string, string> FormData { get; private set; }
-
-        public int RevievedCount { get; private set; } = 0;
-
-        public HttpResponseMessage Response { get; set; }
-
-        public MockHttpMessageHandler(HttpResponseMessage response = null)
-        {
-            this.Response = response;
-        }
-
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            this.RevievedCount += 1;
-            this.Request = request;
-
-            if (request.Content.Headers.ContentType?.MediaType == "application/x-www-form-urlencoded")
-            {
-                this.FormData = new Dictionary<string, string>();
-                var data = await request.Content.ReadAsStringAsync();
-                foreach (var item in data.Split('&'))
-                {
-                    var temp = item.Split('=');
-                    this.FormData[temp[0]] = temp[1];
-                }
-
-            }
-
-
-            if (Response is null)
-                return new HttpResponseMessage(HttpStatusCode.OK);
-            return this.Response;
         }
     }
 }

@@ -5,9 +5,7 @@ using LineChatRoomService.Models.Microservice;
 using LineChatRoomService.Models.Mongo;
 using LineChatRoomService.Repositories.Interface;
 using LineChatRoomService.Services.Interface;
-using LineChatRoomService.Utility;
 using MongoDB.Bson;
-using System.Net.Http.Json;
 using System.Text;
 
 namespace LineChatRoomService.Services
@@ -205,8 +203,9 @@ namespace LineChatRoomService.Services
 
             if (model.Subscriptions.InventoryCheckList is not null)
             {
-                chatRoom!.Subscriptions.InventoryCheckList = model.Subscriptions.InventoryCheckList.Keys.ToList();
-                await UpdateInventoryCheckItems(chatRoom.Id!, chatRoom.Subscriptions.InventoryCheckList);
+                var checkItems = model.Subscriptions.InventoryCheckList.Keys.ToList();
+                await UpdateInventoryCheckItems(chatRoom.Id!, checkItems);
+                chatRoom!.Subscriptions.InventoryCheckList = checkItems;
             }
 
             await this.ChatRoomRepo.Update(chatRoom!);
