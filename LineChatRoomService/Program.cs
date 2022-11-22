@@ -1,3 +1,4 @@
+using LineChatRoomService.Models.Mongo;
 using LineChatRoomService.Repositories;
 using LineChatRoomService.Repositories.Interface;
 using LineChatRoomService.Services;
@@ -7,8 +8,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
-using System.Security.Claims;
-
+using System.Diagnostics;
+using System.Text.Json;
 
 EnsureEnv();
 
@@ -56,14 +57,19 @@ builder.Services.AddScoped<ILineNotifyService>(c =>
                                         );
     return service;
 });
+
 builder.Services.AddScoped<IChatRoomService, ChatRoomService>();
 builder.Services.AddSingleton<IChatRoomRepository, ChatRoomRepository>();
 builder.Services.AddSingleton<IInventoryCheckRepository, InventoryCheckRepository>();
+builder.Services.AddSingleton<IServerLogRepository, ServerLogRepository>();
+
 builder.Services.AddSingleton(c =>
 {
     var connStr = Environment.GetEnvironmentVariable("mongo_conn_str")!;
     return new MongoClient(connStr).GetDatabase("LineChatRoom-Service");
 });
+
+
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>(c =>
 {
     var endpoint = Environment.GetEnvironmentVariable("Subscription_Endpoint")!;
@@ -71,6 +77,7 @@ builder.Services.AddScoped<ISubscriptionService, SubscriptionService>(c =>
     var factory = c.GetRequiredService<IHttpClientFactory>();
     return new SubscriptionService(logger, factory, endpoint);
 });
+
 builder.Services.AddCors(op =>
 {
     op.AddPolicy(
@@ -99,23 +106,65 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
-
+// Error handle and logger
 app.Use(async (context, next) =>
 {
+    context.Request.EnableBuffering();
+    string? error = null;
+
+    var startTime = DateTime.Now;
+    var sw = Stopwatch.StartNew();
     try
     {
         await next.Invoke();
     }
     catch (Exception ex)
     {
-        context.Response.StatusCode = 400;
+        error = ex.ToString();
+        context.Response.StatusCode = 500;
         Console.Error.WriteLine("Request caught ex: " + ex);
-        await context.Response.WriteAsJsonAsync(new
+    }
+
+    // Log Req and Resp
+    try
+    {
+        string? requestBody = null;
+        // Reset buffer offset
+        context.Request.Body.Position = 0;
+        if (context.Request.Headers.ContentType == "application/json")
+            requestBody = JsonSerializer.Serialize(await context.Request.ReadFromJsonAsync<object>(), new JsonSerializerOptions
+            {
+                WriteIndented = true,
+            });
+
+
+        var req = new Request
         {
-            error_message = ex.Message.ToString()
-        });
+            Url = context.Request.Path,
+            Method = context.Request.Method,
+            Body = requestBody,
+        };
+
+        var log = new ServerLog
+        {
+            StartTime = startTime,
+            ProcessTime = (uint)sw.ElapsedMilliseconds,
+            Error = error,
+            Request = req,
+            ResponseStatus = context.Response.StatusCode
+        };
+
+        var repo = context.RequestServices.GetRequiredService<IServerLogRepository>();
+        await repo.InsertLog(log);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex);
+        throw;
     }
 });
+
+
 // Configure the HTTP request pipeline.
 app.UseSwagger();
 app.UseSwaggerUI();
