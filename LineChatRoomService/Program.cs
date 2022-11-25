@@ -1,3 +1,4 @@
+using Google.Cloud.PubSub.V1;
 using LineChatRoomService.Models.Mongo;
 using LineChatRoomService.Repositories;
 using LineChatRoomService.Repositories.Interface;
@@ -70,12 +71,14 @@ builder.Services.AddSingleton(c =>
 });
 
 
-builder.Services.AddScoped<ISubscriptionService, SubscriptionService>(c =>
+builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+
+builder.Services.AddScoped<IIntergrationEventService>(c =>
 {
-    var endpoint = Environment.GetEnvironmentVariable("Subscription_Endpoint")!;
-    var logger = c.GetRequiredService<ILogger<SubscriptionService>>();
-    var factory = c.GetRequiredService<IHttpClientFactory>();
-    return new SubscriptionService(logger, factory, endpoint);
+    var topic = TopicName.Parse(Environment.GetEnvironmentVariable("gcp_intergration_topic_path"));
+    var publisher = PublisherClient.Create(topic);
+    var service = new IntergrationEventService(publisher);
+    return service;
 });
 
 builder.Services.AddCors(op =>
@@ -182,11 +185,16 @@ app.Run();
 
 static void EnsureEnv()
 {
-    var lineClientId = Environment.GetEnvironmentVariable("line_client_id");
-    var lineClientSecret = Environment.GetEnvironmentVariable("line_client_secret");
-    var mongo_connStr = Environment.GetEnvironmentVariable("mongo_conn_str");
-    var endpoint = Environment.GetEnvironmentVariable("SubscriptionEndpoint");
+    var envs = Environment.GetEnvironmentVariables();
 
-    if (new[] { lineClientId, lineClientSecret, mongo_connStr }.Any(x => string.IsNullOrWhiteSpace(x)))
-        throw new Exception("EnvironmentVariable setup fail...");
+    if (!envs.Contains("gcp_intergration_topic_path"))
+        throw new Exception("env: gcp_intergration_topic_path not setup");
+    if (!envs.Contains("line_client_id"))
+        throw new Exception("env: line_client_id not setup");
+    if (!envs.Contains("line_client_secret"))
+        throw new Exception("env: line_client_secret not setup");
+    if (!envs.Contains("mongo_conn_str"))
+        throw new Exception("env: mongo_conn_str not setup");
+    if (!envs.Contains("GOOGLE_APPLICATION_CREDENTIALS"))
+        throw new Exception("env: GOOGLE_APPLICATION_CREDENTIALS not setup");
 }

@@ -185,7 +185,7 @@ namespace LineChatRoomService.Services
                 await this.SubscriptionService.ChangeSubscription(
                         changeType: model.Subscriptions.DailyNewOnSale.Value ? ChangeSubscriptionType.Create : ChangeSubscriptionType.Delete,
                         token: chatRoom.Token!,
-                        subscriptionType: SubscriptionType.DailyNewOnsale,
+                        subscriptionType: SubscriptionType.DailyNewOnSale,
                         code: null
                     );
             }

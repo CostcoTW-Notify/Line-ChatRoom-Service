@@ -9,5 +9,6 @@ namespace LineChatRoomService.Services.Interface
 
 
         Task<bool> DeleteAllSubscription(string token);
+
     }
 }

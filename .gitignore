@@ -362,3 +362,4 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /LineChatRoomService/HS256.key
+/LineChatRoomService/gcp_auth.json

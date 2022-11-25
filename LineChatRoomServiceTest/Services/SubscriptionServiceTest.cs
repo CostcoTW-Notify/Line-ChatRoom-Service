@@ -4,6 +4,8 @@ using System.Net.Http.Json;
 using System.Net;
 using Microsoft.Extensions.Logging;
 using LineChatRoomService.Models.Microservice;
+using LineChatRoomService.Services.Interface;
+using LineChatRoomService.Models.Events.Intergration;
 
 namespace LineChatRoomServiceTest.Services
 {
@@ -14,47 +16,34 @@ namespace LineChatRoomServiceTest.Services
         public async void Test_ChangeSubscription_will_call_microservice_endpoint()
         {
 
-            var factory = Substitute.For<IHttpClientFactory>();
-            var mockClientHandler = new MockHttpMessageHandler();
-            factory.CreateClient().ReturnsForAnyArgs(new HttpClient(mockClientHandler));
+            var intergraionService = Substitute.For<IIntergrationEventService>();
+            var service = new SubscriptionService(Substitute.For<ILogger<SubscriptionService>>(), intergraionService);
 
-            var service = new SubscriptionService(Substitute.For<ILogger<SubscriptionService>>(), factory, "https://localhost/updateEndpoint");
 
             // Action
             await service.ChangeSubscription(ChangeSubscriptionType.Create, "Token", SubscriptionType.DailyNewBestBuy, null);
 
             // Assert
-            Assert.Equal(1, mockClientHandler.RevievedCount);
-            Assert.Equal("https://localhost/updateEndpoint", mockClientHandler.Request.RequestUri.AbsoluteUri.ToString());
-            var reqContent = await mockClientHandler.Request.Content.ReadFromJsonAsync<ChangeSubscriptionRequest>();
-            Assert.Equal(ChangeSubscriptionType.Create, reqContent.requestType);
-            Assert.Equal("Token", reqContent.token);
-            Assert.Equal(SubscriptionType.DailyNewBestBuy, reqContent.subscriptionType);
-            Assert.Equal(HttpMethod.Patch, mockClientHandler.Request.Method);
+            await intergraionService.Received(1)
+                .PublishEvent(Arg.Is<RegisterSubscription>(x => x.SubscriberType == "LineNotify" &&
+                                                                x.Subscriber == "Token" &&
+                                                                x.SubscriptionType == "DailyNewBestBuy" &&
+                                                                x.Code == null));
         }
 
 
         [Fact]
         public async void Test_DeleteAllSubscription_will_call_microservice_endpoint()
         {
-            var factory = Substitute.For<IHttpClientFactory>();
-            var mockClientHandler = new MockHttpMessageHandler();
-            factory.CreateClient().ReturnsForAnyArgs(new HttpClient(mockClientHandler));
-
-            var service = new SubscriptionService(Substitute.For<ILogger<SubscriptionService>>(), factory, "https://localhost/updateEndpoint");
+            var intergraionService = Substitute.For<IIntergrationEventService>();
+            var service = new SubscriptionService(Substitute.For<ILogger<SubscriptionService>>(), intergraionService);
 
             // Action
             await service.DeleteAllSubscription("Token");
 
             // Assert
-            Assert.Equal(1, mockClientHandler.RevievedCount);
-            Assert.Equal("https://localhost/updateEndpoint", mockClientHandler.Request.RequestUri.AbsoluteUri.ToString());
-            Assert.Equal(HttpMethod.Patch, mockClientHandler.Request.Method);
-            var reqContent = await mockClientHandler.Request.Content.ReadFromJsonAsync<ChangeSubscriptionRequest>();
-            Assert.Equal(ChangeSubscriptionType.Delete, reqContent.requestType);
-            Assert.Null(reqContent.code);
-            Assert.Null(reqContent.subscriptionType);
-            Assert.Equal("Token", reqContent.token);
+            await intergraionService.Received(1)
+                .PublishEvent(Arg.Is<RemoveSubscriber>(x => x.SubscriberType == "LineNotify" && x.Subscriber == "Token"));
         }
     }
 }
