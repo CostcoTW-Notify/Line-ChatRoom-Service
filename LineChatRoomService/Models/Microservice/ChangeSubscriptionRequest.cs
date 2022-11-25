@@ -22,7 +22,7 @@
     {
         Unknown = 0,
         DailyNewBestBuy = 1,
-        DailyNewOnsale = 2,
+        DailyNewOnSale = 2,
         InventoryCheck = 3,
     }
 }

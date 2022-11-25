@@ -1,4 +1,5 @@
-﻿using LineChatRoomService.Models.Microservice;
+﻿using LineChatRoomService.Models.Events.Intergration;
+using LineChatRoomService.Models.Microservice;
 using LineChatRoomService.Services.Interface;
 using LineChatRoomService.Utility;
 using System.Diagnostics.CodeAnalysis;
@@ -9,16 +10,14 @@ namespace LineChatRoomService.Services
     {
         private readonly ILogger<SubscriptionService> _log;
 
-        public IHttpClientFactory HttpClientFactory { get; }
-
-        public string SubscriptionEndpoint { get; }
+        public IIntergrationEventService IntergrationService { get; }
 
 
-        public SubscriptionService(ILogger<SubscriptionService> logger, IHttpClientFactory factory, string subscriptionEndpoint)
+        public SubscriptionService(ILogger<SubscriptionService> logger,
+                                   IIntergrationEventService service)
         {
             this._log = logger;
-            this.HttpClientFactory = factory;
-            this.SubscriptionEndpoint = subscriptionEndpoint;
+            this.IntergrationService = service;
         }
 
 
@@ -26,42 +25,55 @@ namespace LineChatRoomService.Services
         {
             if (subscriptionType == SubscriptionType.InventoryCheck && string.IsNullOrWhiteSpace(code))
                 throw new Exception("Missing 'code'");
-            var req = new HttpRequestMessage(HttpMethod.Patch, this.SubscriptionEndpoint);
 
-            var body = new ChangeSubscriptionRequest
+            var type = subscriptionType.ToString();
+
+
+            IntergrationEvent @event;
+
+            if (changeType == ChangeSubscriptionType.Create)
             {
-                requestType = changeType,
-                token = token,
-                subscriptionType = subscriptionType,
-                code = code,
-            };
+                @event = new RegisterSubscription
+                {
+                    Code = code,
+                    Subscriber = token,
+                    SubscriberType = "LineNotify",
+                    SubscriptionType = type,
+                };
 
-            req.Content = JsonContent.Create(body);
+            }
+            else if (changeType == ChangeSubscriptionType.Delete)
+            {
+                @event = new RemoveSubscription
+                {
+                    Code = code,
+                    Subscriber = token,
+                    SubscriberType = "LineNotify",
+                    SubscriptionType = type,
+                };
+            }
+            else
+            {
+                throw new Exception("Invalid ChangeSubscriptionType type");
+            }
 
-            var client = this.HttpClientFactory.CreateClient("default");
+            await this.IntergrationService.PublishEvent(@event);
 
-            var response = await client.SendAsync(req);
-
-            return response.IsSuccessStatusCode;
+            return true;
         }
 
         public async Task<bool> DeleteAllSubscription([NotNull] string token)
         {
-            var req = new HttpRequestMessage(HttpMethod.Patch, this.SubscriptionEndpoint);
 
-            var body = new ChangeSubscriptionRequest
+            var @event = new RemoveSubscriber
             {
-                requestType = ChangeSubscriptionType.Delete,
-                token = token,
+                SubscriberType = "LineNotify",
+                Subscriber = token,
             };
 
-            req.Content = JsonContent.Create(body);
+            await this.IntergrationService.PublishEvent(@event);
 
-            var client = this.HttpClientFactory.CreateClient("default");
-
-            var response = await client.SendAsync(req);
-
-            return response.IsSuccessStatusCode;
+            return true;
         }
     }
 }
