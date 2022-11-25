@@ -25,12 +25,13 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
                 {
+                    var key = File.ReadAllBytes(Environment.GetEnvironmentVariable("jwt_auth_key")!);
                     options.TokenValidationParameters = new TokenValidationParameters
                     {
                         ValidateIssuer = false,
                         RequireAudience = false,
                         ValidateAudience = false,
-                        IssuerSigningKey = new SymmetricSecurityKey(File.ReadAllBytes("HS256.key"))
+                        IssuerSigningKey = new SymmetricSecurityKey(key)
                     };
                     options.IncludeErrorDetails = true;
                 })
@@ -197,4 +198,6 @@ static void EnsureEnv()
         throw new Exception("env: mongo_conn_str not setup");
     if (!envs.Contains("GOOGLE_APPLICATION_CREDENTIALS"))
         throw new Exception("env: GOOGLE_APPLICATION_CREDENTIALS not setup");
+    if (!envs.Contains("jwt_auth_key"))
+        throw new Exception("env: jwt_auth_key not setup");
 }
